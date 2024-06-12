@@ -67,3 +67,13 @@ def tv_loss(depth):
     h_tv = torch.square(depth[..., 1:, :] - depth[..., :h-1, :]).sum()
     w_tv = torch.square(depth[..., :, 1:] - depth[..., :, :w-1]).sum()
     return 2 * (h_tv / count_h + w_tv / count_w)
+
+def multi_scale_depth_loss(predicted_depth, gt_depth, scales=[1, 2, 4]):
+    loss = 0.0
+    for scale in scales:
+        scaled_predicted_depth = F.interpolate(predicted_depth, scale_factor=1/scale, mode='bilinear', align_corners=True)
+        scaled_gt_depth = F.interpolate(gt_depth, scale_factor=1/scale, mode='bilinear', align_corners=True)
+        if scaled_predicted_depth.size() != scaled_gt_depth.size():
+            scaled_gt_depth = scaled_gt_depth[:, :scaled_predicted_depth.size(1), :, :]
+        loss += F.l1_loss(scaled_predicted_depth, scaled_gt_depth)
+    return loss

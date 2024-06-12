@@ -14,7 +14,7 @@ from collections import defaultdict
 import torch
 import torch.nn.functional as F
 from random import randint
-from utils.loss_utils import psnr, ssim
+from utils.loss_utils import psnr, ssim, multi_scale_depth_loss
 from gaussian_renderer import render
 from scene import Scene, GaussianModel, EnvLight
 from utils.general_utils import seed_everything, visualize_depth
@@ -154,8 +154,10 @@ def training(args):
 
         if args.lambda_inv_depth > 0:
             inverse_depth = 1 / (depth + 1e-5)
+            gt_depth = viewpoint_cam.pts_depth.to("cuda").double()
             loss_inv_depth = kornia.losses.inverse_depth_smoothness_loss(inverse_depth[None], gt_image[None])
-            log_dict['loss_inv_depth'] = loss_inv_depth.item()
+            # loss_inv_depth = multi_scale_depth_loss(depth[None], gt_depth[None])
+            log_dict['depth_loss'] = loss_inv_depth.item()
             loss = loss + args.lambda_inv_depth * loss_inv_depth
 
         if args.lambda_v_smooth > 0:
@@ -290,6 +292,7 @@ def complete_eval(tb_writer, iteration, test_iterations, scene : Scene, renderFu
                 psnr_test = 0.0
                 ssim_test = 0.0
                 lpips_test = 0.0
+                depth_loss_test = 0.0
                 outdir = os.path.join(args.model_path, "eval", config['name'] + f"_{iteration}" + "_render")
                 os.makedirs(outdir,exist_ok=True)
                 for idx, viewpoint in enumerate(tqdm(config['cameras'])):
@@ -306,10 +309,10 @@ def complete_eval(tb_writer, iteration, test_iterations, scene : Scene, renderFu
                         elif args.depth_blend_mode == 1:
                             depth = alpha * depth + (1 - alpha) * sky_depth
                 
-                    depth = visualize_depth(depth)
+                    vis_depth = visualize_depth(depth)
                     alpha = alpha.repeat(3, 1, 1)
 
-                    grid = [gt_image, image, alpha, depth]
+                    grid = [gt_image, image, alpha, vis_depth]
                     grid = make_grid(grid, nrow=2)
 
                     save_image(grid, os.path.join(outdir, f"{viewpoint.colmap_id:03d}.png"))
@@ -319,18 +322,34 @@ def complete_eval(tb_writer, iteration, test_iterations, scene : Scene, renderFu
                     ssim_test += ssim(image, gt_image).double()
                     lpips_test += lpips(image, gt_image, net_type='vgg').double()  # very slow
 
+                    gt_depth = viewpoint.pts_depth.to("cuda").double()
+                    # depth_loss_test += multi_scale_depth_loss(depth[None], gt_depth[None]).double()
+                    depth_loss_test += kornia.losses.inverse_depth_smoothness_loss(depth[None], gt_depth[None])
+
                 psnr_test /= len(config['cameras'])
                 l1_test /= len(config['cameras'])
                 ssim_test /= len(config['cameras'])
                 lpips_test /= len(config['cameras'])
+                depth_loss_test /= len(config['cameras'])
 
-                print("\n[ITER {}] Evaluating {}: L1 {} PSNR {} SSIM {} LPIPS {}".format(iteration, config['name'], l1_test, psnr_test, ssim_test, lpips_test))
+                print("\n[ITER {}] Evaluating {}: L1 {} PSNR {} SSIM {} LPIPS {} Depth Loss {}".format(
+                    iteration, config['name'], l1_test, psnr_test, ssim_test, lpips_test, depth_loss_test))
+
                 if tb_writer:
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - l1_loss', l1_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - psnr', psnr_test, iteration)
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - ssim', ssim_test, iteration)
+                    tb_writer.add_scalar(config['name'] + '/loss_viewpoint - depth_loss', depth_loss_test, iteration)
+
                 with open(os.path.join(outdir, "metrics.json"), "w") as f:
-                    json.dump({"split": config['name'], "iteration": iteration, "psnr": psnr_test.item(), "ssim": ssim_test.item(), "lpips": lpips_test.item()}, f)
+                    json.dump({
+                        "split": config['name'], 
+                        "iteration": iteration, 
+                        "psnr": psnr_test.item(), 
+                        "ssim": ssim_test.item(), 
+                        "lpips": lpips_test.item(), 
+                        "depth_loss": depth_loss_test.item()
+                    }, f)
         torch.cuda.empty_cache()
 
 

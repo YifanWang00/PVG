@@ -14,7 +14,7 @@ separate_scaling_t: 0.2
 
 
 # OptimizationParams
-iterations: 30000
+iterations: 10000
 
 opacity_lr: 0.005
 
