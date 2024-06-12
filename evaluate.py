@@ -13,6 +13,7 @@ import json
 import os
 import torch
 import torch.nn.functional as F
+import open3d as o3d
 from utils.loss_utils import psnr, ssim
 from gaussian_renderer import render
 from scene import Scene, GaussianModel, EnvLight
@@ -55,6 +56,8 @@ def evaluation(iteration, scene : Scene, renderFunc, renderArgs, env_map=None):
 
                 depth = render_pkg['depth']
                 alpha = render_pkg['alpha']
+                points = render_pkg['viewspace_points'].cpu().numpy()
+                colors = image.cpu().numpy().transpose(1, 2, 0).reshape(-1, 3)
                 sky_depth = 900
                 depth = depth / alpha.clamp_min(EPS)
                 if env_map is not None:
@@ -70,6 +73,7 @@ def evaluation(iteration, scene : Scene, renderFunc, renderArgs, env_map=None):
                 grid = make_grid(grid, nrow=2)
 
                 save_image(grid, os.path.join(outdir, f"{viewpoint.colmap_id:03d}.png"))
+                save_ply(os.path.join(outdir, f"{viewpoint.colmap_id:03d}.ply"), points, colors)
 
                 l1_test += F.l1_loss(image, gt_image).double()
                 psnr_test += psnr(image, gt_image).double()
@@ -84,6 +88,13 @@ def evaluation(iteration, scene : Scene, renderFunc, renderArgs, env_map=None):
             print("\n[ITER {}] Evaluating {}: L1 {} PSNR {} SSIM {} LPIPS {}".format(iteration, config['name'], l1_test, psnr_test, ssim_test, lpips_test))
             with open(os.path.join(outdir, "metrics.json"), "w") as f:
                 json.dump({"split": config['name'], "iteration": iteration, "psnr": psnr_test.item(), "ssim": ssim_test.item(), "lpips": lpips_test.item()}, f)
+
+
+def save_ply(filename, points, colors):
+    point_cloud = o3d.geometry.PointCloud()
+    point_cloud.points = o3d.utility.Vector3dVector(points)
+    point_cloud.colors = o3d.utility.Vector3dVector(colors)
+    o3d.io.write_point_cloud(filename, point_cloud)
 
 
 if __name__ == "__main__":
