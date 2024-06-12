@@ -1,6 +1,6 @@
-test_iterations: [2000, 6000, 8000, 10000]
-save_iterations: [2000, 6000, 8000, 10000]
-checkpoint_iterations: [2000, 6000, 8000, 10000]
+test_iterations: [2000, 4000, 6000, 8000, 10000]
+save_iterations: [2000, 4000, 6000, 8000, 10000]
+checkpoint_iterations: [10000]
 exhaust_test: false
 test_interval: 5000
 render_static: false

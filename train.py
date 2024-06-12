@@ -14,7 +14,7 @@ from collections import defaultdict
 import torch
 import torch.nn.functional as F
 from random import randint
-from utils.loss_utils import psnr, ssim, multi_scale_depth_loss
+from utils.loss_utils import psnr, ssim, multi_scale_depth_loss, calculate_depth_difference
 from gaussian_renderer import render
 from scene import Scene, GaussianModel, EnvLight
 from utils.general_utils import seed_everything, visualize_depth
@@ -155,8 +155,8 @@ def training(args):
         if args.lambda_inv_depth > 0:
             inverse_depth = 1 / (depth + 1e-5)
             gt_depth = viewpoint_cam.pts_depth.to("cuda").double()
-            loss_inv_depth = kornia.losses.inverse_depth_smoothness_loss(inverse_depth[None], gt_image[None])
-            # loss_inv_depth = multi_scale_depth_loss(depth[None], gt_depth[None])
+            # loss_inv_depth = kornia.losses.inverse_depth_smoothness_loss(inverse_depth[None], gt_image[None])
+            loss_inv_depth = multi_scale_depth_loss(depth[None], gt_depth[None])
             log_dict['depth_loss'] = loss_inv_depth.item()
             loss = loss + args.lambda_inv_depth * loss_inv_depth
 
@@ -323,8 +323,10 @@ def complete_eval(tb_writer, iteration, test_iterations, scene : Scene, renderFu
                     lpips_test += lpips(image, gt_image, net_type='vgg').double()  # very slow
 
                     gt_depth = viewpoint.pts_depth.to("cuda").double()
+                    depth_loss_test = calculate_depth_difference(depth[None], gt_depth[None]).double()
                     # depth_loss_test += multi_scale_depth_loss(depth[None], gt_depth[None]).double()
-                    depth_loss_test += kornia.losses.inverse_depth_smoothness_loss(depth[None], gt_depth[None])
+                    # inverse_depth = 1 / (depth + 1e-5)
+                    # depth_loss_test += kornia.losses.inverse_depth_smoothness_loss(inverse_depth[None], gt_image[None])
 
                 psnr_test /= len(config['cameras'])
                 l1_test /= len(config['cameras'])

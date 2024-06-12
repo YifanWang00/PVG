@@ -6,7 +6,7 @@
 CUDA_VISIBLE_DEVICES=0 python train.py \
 --config configs/waymo_nvs.yaml \
 source_path=data/waymo_scenes/0147030 \
-model_path=/yifan-fast-vol/ece285/eval_output/waymo_nvs/0147030_baseline
+model_path=eval_output/waymo_nvs/0147030_multi_scale_depth_loss
 
 # CUDA_VISIBLE_DEVICES=0 python train.py \
 # --config configs/waymo_nvs.yaml \

@@ -77,3 +77,6 @@ def multi_scale_depth_loss(predicted_depth, gt_depth, scales=[1, 2, 4]):
             scaled_gt_depth = scaled_gt_depth[:, :scaled_predicted_depth.size(1), :, :]
         loss += F.l1_loss(scaled_predicted_depth, scaled_gt_depth)
     return loss
+
+def calculate_depth_difference(predicted_depth, gt_depth):
+    return F.l1_loss(predicted_depth, gt_depth)
