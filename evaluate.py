@@ -14,6 +14,7 @@ import os
 import torch
 import torch.nn.functional as F
 import open3d as o3d
+import numpy as np
 from utils.loss_utils import psnr, ssim
 from gaussian_renderer import render
 from scene import Scene, GaussianModel, EnvLight
@@ -22,6 +23,7 @@ from tqdm import tqdm
 from argparse import ArgumentParser
 from torchvision.utils import make_grid, save_image
 from omegaconf import OmegaConf
+from PIL import Image
 
 EPS = 1e-5
 
@@ -56,8 +58,26 @@ def evaluation(iteration, scene : Scene, renderFunc, renderArgs, env_map=None):
 
                 depth = render_pkg['depth']
                 alpha = render_pkg['alpha']
-                points = render_pkg['viewspace_points'].cpu().numpy()
+
+                points = render_pkg['means3D'].cpu().numpy()
+                print(f"points shape: {points.shape}")
+                if np.all(points==0):
+                    print("points are all zero")
+
                 colors = image.cpu().numpy().transpose(1, 2, 0).reshape(-1, 3)
+                print(f"colors shape: {colors.shape}")
+                if np.all(colors==0):
+                    print("colors are all zero")
+                
+                # print(render_pkg['colors_precomp'])
+                # colors_precomp = render_pkg['colors_precomp'].numpy()
+                # print(f"colors_precomp shape: {colors_precomp.shape}")
+                # if np.any(colors_precomp==0):
+                #     print("colors_precomp are all zero")
+                # else:
+                #     colors_im = Image.fromarray(colors_im)
+                #     colors_im.save('1.jpeg')
+
                 sky_depth = 900
                 depth = depth / alpha.clamp_min(EPS)
                 if env_map is not None:
@@ -91,10 +111,29 @@ def evaluation(iteration, scene : Scene, renderFunc, renderArgs, env_map=None):
 
 
 def save_ply(filename, points, colors):
+    num_points = points.shape[0]
+    num_colors = colors.shape[0]
+    
+    if num_colors < num_points:
+        repeat_factor = num_points // num_colors + 1
+        colors = np.tile(colors, (repeat_factor, 1))
+    
+    colors = colors[:num_points, :]
+    
+    if np.max(colors) > 1.0:
+        colors = colors / 255.0
+    colors = colors.astype(np.float32)
+    
     point_cloud = o3d.geometry.PointCloud()
     point_cloud.points = o3d.utility.Vector3dVector(points)
     point_cloud.colors = o3d.utility.Vector3dVector(colors)
+    
     o3d.io.write_point_cloud(filename, point_cloud)
+    
+    if point_cloud.has_colors():
+        print('point cloud has color')
+    else:
+        print('point cloud does not have color')
 
 
 if __name__ == "__main__":
@@ -129,6 +168,7 @@ if __name__ == "__main__":
     assert len(checkpoints) > 0, "No checkpoints found."
     checkpoint = sorted(checkpoints, key=lambda x: int(x.split("chkpnt")[-1].split(".")[0]))[-1]
     (model_params, first_iter) = torch.load(checkpoint)
+    print(f"Checkpoint {checkpoint} loaded.")
     gaussians.restore(model_params, args)
     
     if env_map is not None:

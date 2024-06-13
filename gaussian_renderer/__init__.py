@@ -144,6 +144,8 @@ def render(viewpoint_camera: Camera, pc: GaussianModel, pipe, bg_color: torch.Te
     return {"render": rendered_image,
             "render_nobg": rendered_image_before,
             "viewspace_points": screenspace_points,
+            "means3D": means3D,
+            "colors_precomp": colors_precomp,
             "visibility_filter": radii > 0,
             "radii": radii,
             "contrib": contrib,
